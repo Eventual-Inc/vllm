@@ -134,7 +134,7 @@ class Scheduler(SchedulerInterface):
         # Priority queues for requests.
         self.waiting = create_request_queue(self.policy)
         self.running: list[Request] = []
-
+        self.rejected: list[Request] = []
         # The request IDs that are finished in between the previous and the
         # current steps. This is used to notify the workers about the finished
         # requests so that they can free the cached states for those requests.
@@ -1135,6 +1135,21 @@ class Scheduler(SchedulerInterface):
             batch = KVEventBatch(ts=time.time(), events=events)
             self.kv_event_publisher.publish(batch)
 
+        if self.rejected:
+            # Create EngineCoreOutputs for all rejected requests.
+            for request in self.rejected:
+                outputs[request.client_index].append(
+                    EngineCoreOutput(
+                        new_token_ids=[],
+                        request_id=request.request_id,
+                        finish_reason=request.get_finished_reason(),
+                        stop_reason=request.stop_reason,
+                        events=request.take_events(),
+                        trace_headers=request.trace_headers,
+                    )
+                )
+            self.rejected.clear()
+
         # Create EngineCoreOutputs for all clients that have requests with
         # outputs in this step.
         engine_core_outputs = {
@@ -1239,6 +1254,14 @@ class Scheduler(SchedulerInterface):
         return len(self.running), len(self.waiting)
 
     def add_request(self, request: Request) -> None:
+        if (max_waiting := self.scheduler_config.max_waiting_queue_length) and len(
+            self.waiting
+        ) >= max_waiting:
+            request.status = RequestStatus.FINISHED_REJECTED
+            self.rejected.append(request)
+            if self.log_stats:
+                request.record_event(EngineCoreEventType.REJECTED)
+            return
         self.waiting.add_request(request)
         self.requests[request.request_id] = request
         if self.log_stats:

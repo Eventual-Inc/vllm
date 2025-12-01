@@ -19,7 +19,7 @@ from vllm.v1.serial_utils import UtilityResult
 
 # These are possible values of RequestOutput.finish_reason,
 # so form part of the external API.
-FINISH_REASON_STRINGS = ("stop", "length", "abort")
+FINISH_REASON_STRINGS = ("stop", "length", "abort", "rejected")
 
 
 class FinishReason(enum.IntEnum):
@@ -37,6 +37,7 @@ class FinishReason(enum.IntEnum):
     STOP = 0
     LENGTH = 1
     ABORT = 2
+    REJECTED = 3
 
     def __str__(self):
         return FINISH_REASON_STRINGS[self.value]
@@ -79,6 +80,7 @@ class EngineCoreEventType(enum.IntEnum):
     QUEUED = 1
     SCHEDULED = 2
     PREEMPTED = 3
+    REJECTED = 4
 
 
 class EngineCoreEvent(msgspec.Struct):
