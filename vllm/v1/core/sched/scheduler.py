@@ -1138,6 +1138,17 @@ class Scheduler(SchedulerInterface):
         if self.rejected:
             # Create EngineCoreOutputs for all rejected requests.
             for request in self.rejected:
+                # Pooling requests need pooling_output set to avoid assertion
+                # failure in output processor (which assumes pooling_output=None
+                # means generation request with detokenizer).
+                if request.pooling_params is not None:
+                    # Pooling/embedding request: set empty pooling_output
+                    import torch
+                    pooling_output = torch.empty(0, device="cpu")
+                else:
+                    # Generation request: no pooling_output
+                    pooling_output = None
+
                 outputs[request.client_index].append(
                     EngineCoreOutput(
                         new_token_ids=[],
@@ -1146,6 +1157,7 @@ class Scheduler(SchedulerInterface):
                         stop_reason=request.stop_reason,
                         events=request.take_events(),
                         trace_headers=request.trace_headers,
+                        pooling_output=pooling_output,
                     )
                 )
             self.rejected.clear()
