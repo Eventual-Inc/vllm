@@ -253,6 +253,13 @@ class OpenAIServingPooling(OpenAIServing):
 
             final_res_batch_checked = cast(list[PoolingRequestOutput], final_res_batch)
 
+            # Check if any requests were rejected or aborted
+            for final_res in final_res_batch_checked:
+                if error_response := self._handle_pooling_error_finish_reason(
+                    final_res, request_id
+                ):
+                    return error_response
+
             response = self.request_output_to_pooling_response(
                 final_res_batch_checked,
                 request_id,

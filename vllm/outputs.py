@@ -68,12 +68,17 @@ class PoolingOutput:
 
     Args:
         data: The extracted hidden states.
+        finish_reason: The reason why the pooling finished.
     """
 
     data: torch.Tensor
+    finish_reason: str | None = None
 
     def __repr__(self) -> str:
-        return f"PoolingOutput(data={self.data})"
+        return (
+            f"PoolingOutput(data={self.data}, "
+            f"finish_reason={self.finish_reason})"
+        )
 
     def __eq__(self, other: object) -> bool:
         return isinstance(other, self.__class__) and bool(
@@ -203,6 +208,7 @@ class PoolingRequestOutput(Generic[_O]):
         prompt_token_ids (list[int]): A list of token IDs used in the prompt.
         num_cached_tokens: The number of tokens with prefix cache hit.
         finished (bool): A flag indicating whether the pooling is completed.
+        finish_reason (str | None): The reason why the pooling finished.
     """
 
     def __init__(
@@ -212,11 +218,13 @@ class PoolingRequestOutput(Generic[_O]):
         prompt_token_ids: list[int],
         num_cached_tokens: int,
         finished: bool,
+        finish_reason: str | None = None,
     ):
         self.request_id = request_id
         self.prompt_token_ids = prompt_token_ids
         self.num_cached_tokens = num_cached_tokens
         self.finished = finished
+        self.finish_reason = finish_reason
         self.outputs = outputs
 
     def __repr__(self):
@@ -225,7 +233,8 @@ class PoolingRequestOutput(Generic[_O]):
             f"outputs={self.outputs!r}, "
             f"prompt_token_ids={self.prompt_token_ids}, "
             f"num_cached_tokens={self.num_cached_tokens}, "
-            f"finished={self.finished})"
+            f"finished={self.finished}, "
+            f"finish_reason={self.finish_reason})"
         )
 
 

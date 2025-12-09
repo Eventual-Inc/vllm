@@ -756,6 +756,28 @@ class OpenAIServing:
             )
         return None
 
+    def _handle_pooling_error_finish_reason(
+        self, pooling_output: PoolingRequestOutput, request_id: str
+    ) -> ErrorResponse | None:
+        """Check if pooling request was rejected/aborted and return error response."""
+        if pooling_output.finish_reason == "rejected":
+            logger.error(
+                "Request %s was rejected due to full waiting queue", request_id
+            )
+            return self.create_error_response(
+                "Service Unavailable - Queue Full",
+                err_type="SERVICE_UNAVAILABLE",
+                status_code=HTTPStatus.SERVICE_UNAVAILABLE,
+            )
+        elif pooling_output.finish_reason == "abort":
+            logger.error("Request %s was aborted", request_id)
+            return self.create_error_response(
+                "Request Aborted",
+                err_type="REQUEST_ABORTED",
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
+        return None
+
     def create_streaming_error_response(
         self,
         message: str,

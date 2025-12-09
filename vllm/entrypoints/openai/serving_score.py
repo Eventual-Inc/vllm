@@ -364,6 +364,13 @@ class ServingScores(OpenAIServing):
             if isinstance(final_res_batch, ErrorResponse):
                 return final_res_batch
 
+            # Check if any requests were rejected or aborted
+            for final_res in final_res_batch:
+                if error_response := self._handle_pooling_error_finish_reason(
+                    final_res, request_id
+                ):
+                    return error_response
+
             return self.request_output_to_score_response(
                 final_res_batch,
                 request_id,
@@ -414,6 +421,13 @@ class ServingScores(OpenAIServing):
             )
             if isinstance(final_res_batch, ErrorResponse):
                 return final_res_batch
+
+            # Check if any requests were rejected or aborted
+            for final_res in final_res_batch:
+                if error_response := self._handle_pooling_error_finish_reason(
+                    final_res, request_id
+                ):
+                    return error_response
 
             return self.request_output_to_rerank_response(
                 final_res_batch,

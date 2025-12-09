@@ -238,7 +238,9 @@ class RequestState:
         request_id = self.request_id
         if pooling_output is not None:
             return self._new_request_output(
-                request_id, [self._new_pooling_output(pooling_output)], finished
+                request_id,
+                [self._new_pooling_output(pooling_output, finish_reason)],
+                finished,
             )
 
         output = self._new_completion_output(new_token_ids, finish_reason, stop_reason)
@@ -268,12 +270,15 @@ class RequestState:
             assert len(outputs) == 1
             # Prompt embeddings are currently not supported by pooling requests.
             assert self.prompt_token_ids is not None
+            # Extract finish_reason from PoolingOutput
+            finish_reason = first_output.finish_reason
             return PoolingRequestOutput(
                 request_id=request_id,
                 outputs=first_output,
                 num_cached_tokens=self.num_cached_tokens,
                 prompt_token_ids=self.prompt_token_ids,
                 finished=finished,
+                finish_reason=finish_reason,
             )
         assert self.logprobs_processor is not None
         if self.output_kind == RequestOutputKind.DELTA:
@@ -333,8 +338,11 @@ class RequestState:
     def _new_pooling_output(
         self,
         pooling_output: torch.Tensor,
+        finish_reason: FinishReason | None,
     ) -> PoolingOutput:
-        return PoolingOutput(data=pooling_output)
+        # Convert FinishReason enum to string
+        finish_reason_str = str(finish_reason) if finish_reason else None
+        return PoolingOutput(data=pooling_output, finish_reason=finish_reason_str)
 
 
 class OutputProcessor:
@@ -474,22 +482,38 @@ class OutputProcessor:
             req_state.num_cached_tokens = engine_core_output.num_cached_tokens
             req_state.is_prefilling = False
 
-            if pooling_output is None:
-                assert req_state.detokenizer is not None
-                assert req_state.logprobs_processor is not None
-                # 2) Detokenize the token ids into text and perform stop checks.
-                stop_string = req_state.detokenizer.update(
-                    new_token_ids, finish_reason == FinishReason.STOP
-                )
-                if stop_string:
-                    finish_reason = FinishReason.STOP
-                    stop_reason = stop_string
+            # Skip detokenization for rejected/aborted requests
+            # These requests never ran, so there's nothing to process
+            if finish_reason not in (FinishReason.ABORT, FinishReason.REJECTED):
+                if pooling_output is None:
+                    assert req_state.detokenizer is not None
+                    assert req_state.logprobs_processor is not None
+                    # 2) Detokenize the token ids into text and perform stop checks.
+                    stop_string = req_state.detokenizer.update(
+                        new_token_ids, finish_reason == FinishReason.STOP
+                    )
+                    if stop_string:
+                        finish_reason = FinishReason.STOP
+                        stop_reason = stop_string
 
-                # 3) Compute sample and prompt logprobs for request,
-                # if required.
-                req_state.logprobs_processor.update_from_output(engine_core_output)
+                    # 3) Compute sample and prompt logprobs for request,
+                    # if required.
+                    req_state.logprobs_processor.update_from_output(engine_core_output)
 
             # 4) Create and handle RequestOutput objects.
+            # For rejected/aborted pooling requests, we need to set pooling_output
+            # to prevent make_request_output from trying to create a completion
+            # output (which requires detokenizer that pooling requests don't have)
+            # The finish_reason will be passed through to PoolingOutput and
+            # PoolingRequestOutput, allowing serving endpoints to check it and
+            # return appropriate error responses (503 for rejected, 500 for abort)
+            if finish_reason in (FinishReason.ABORT, FinishReason.REJECTED):
+                if req_state.detokenizer is None:
+                    # This is a pooling request - set empty pooling_output
+                    # The finish_reason will be properly set in the PoolingOutput
+                    import torch
+                    pooling_output = torch.empty(0, device="cpu")
+
             if request_output := req_state.make_request_output(
                 new_token_ids,
                 pooling_output,
