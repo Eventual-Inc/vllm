@@ -125,6 +125,13 @@ class EmbeddingMixin(OpenAIServing):
     ) -> EmbeddingResponse | Response | ErrorResponse:
         final_res_batch_checked = cast(list[PoolingRequestOutput], ctx.final_res_batch)
 
+        # Check if any requests were rejected or aborted
+        for final_res in final_res_batch_checked:
+            if error_response := self._handle_pooling_error_finish_reason(
+                final_res, ctx.request_id
+            ):
+                return error_response
+
         encoding_format: EncodingFormat = ctx.request.encoding_format
         embed_dtype: EmbedDType = ctx.request.embed_dtype
         endianness: Endianness = ctx.request.endianness

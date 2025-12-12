@@ -1137,6 +1137,10 @@ class Scheduler(SchedulerInterface):
 
         if self.rejected:
             # Create EngineCoreOutputs for all rejected requests.
+            # Note: We don't set pooling_output here even for pooling requests
+            # because that would make them appear as successful responses with
+            # empty embeddings. The output processor will handle rejected
+            # requests specially based on finish_reason.
             for request in self.rejected:
                 outputs[request.client_index].append(
                     EngineCoreOutput(
