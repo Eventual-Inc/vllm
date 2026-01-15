@@ -110,6 +110,7 @@ from vllm.utils.async_utils import (
 )
 from vllm.utils.collection_utils import is_list_of
 from vllm.v1.engine import EngineCoreRequest
+from vllm.v1.engine.exceptions import EngineDeadError
 
 logger = init_logger(__name__)
 
@@ -676,6 +677,8 @@ class OpenAIServing:
 
             return None
 
+        except EngineDeadError:
+            return self._create_engine_dead_error_response()
         except Exception as e:
             # TODO: Use a vllm-specific Validation Error
             return self.create_error_response(str(e))
@@ -708,6 +711,8 @@ class OpenAIServing:
 
             return None
 
+        except EngineDeadError:
+            return self._create_engine_dead_error_response()
         except Exception as e:
             return self.create_error_response(str(e))
 
@@ -777,6 +782,14 @@ class OpenAIServing:
                 status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
             )
         return None
+
+    def _create_engine_dead_error_response(self) -> ErrorResponse:
+        """Create error response for when the engine has died."""
+        return self.create_error_response(
+            "Service Unavailable - Engine Dead",
+            err_type="SERVICE_UNAVAILABLE",
+            status_code=HTTPStatus.SERVICE_UNAVAILABLE,
+        )
 
     def create_streaming_error_response(
         self,
