@@ -39,6 +39,7 @@ from vllm.outputs import (
     RequestOutput,
 )
 from vllm.pooling_params import PoolingParams
+from vllm.v1.engine.exceptions import EngineDeadError
 from vllm.utils.async_utils import merge_async_iterators
 from vllm.utils.collection_utils import chunk_list
 from vllm.utils.serial_utils import (
@@ -427,6 +428,8 @@ class EmbeddingMixin(OpenAIServing):
 
             return None
 
+        except EngineDeadError:
+            return self._create_engine_dead_error_response()
         except Exception as e:
             # TODO: Use a vllm-specific Validation Error
             return self.create_error_response(str(e))
@@ -607,6 +610,8 @@ class EmbeddingMixin(OpenAIServing):
 
             return None
 
+        except EngineDeadError:
+            return self._create_engine_dead_error_response()
         except Exception as e:
             return self.create_error_response(str(e))
 
